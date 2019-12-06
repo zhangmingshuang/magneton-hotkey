@@ -1,8 +1,8 @@
 package com.magneton.hotkey.client.collector;
 
-import com.magneton.hotkey.client.HotkeyContainer;
-import com.magneton.hotkey.client.HotkeySummarier;
-import com.magneton.hotkey.client.properties.CollectProperties;
+import com.magneton.hotkey.client.summarier.ConfigableHotkeySummarier;
+import com.magneton.hotkey.client.summarier.HotkeySummarier;
+import com.magneton.hotkey.client.config.CollectConfig;
 import com.magneton.hotkey.common.Hotkey;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -22,7 +22,7 @@ public abstract class AbstractHotkeyCollector implements ConfigurableHotkeyColle
     private static final Logger LOGGER = LoggerFactory.getLogger(AbstractHotkeyCollector.class);
     private static final int DEFAULT_MAXIMUM_SIZE = 1024;
 
-    private CollectProperties properties;
+    private CollectConfig collectConfig;
     @Getter
     private int maximumSize;
     @Getter
@@ -70,11 +70,6 @@ public abstract class AbstractHotkeyCollector implements ConfigurableHotkeyColle
         return this.hotkeyContainer.offer(hotkey);
     }
 
-    @Override
-    public void setExecutor(Executor executor) {
-        this.executor = executor;
-    }
-
     protected void summary() {
         if (!working || hotkeyContainer.size() < 1) {
             return;
@@ -84,8 +79,8 @@ public abstract class AbstractHotkeyCollector implements ConfigurableHotkeyColle
         }
         this.collectNum.set(0);
         HotkeyContainer newHotkeyContainer = this.getHotkeyContainer();
-        HotkeyContainer sumaryHotkeyContainer = this.hotkeyContainer;
-        this.hotkeyContainer = newHotkeyContainer;
+        HotkeyContainer sumaryHotkeyContainer = hotkeyContainer;
+        hotkeyContainer = newHotkeyContainer;
         try {
             if (executor != null) {
                 executor.execute(() -> hotkeySummarier.report(sumaryHotkeyContainer));
@@ -105,11 +100,32 @@ public abstract class AbstractHotkeyCollector implements ConfigurableHotkeyColle
      */
     protected abstract HotkeyContainer getHotkeyContainer();
 
+
     @Override
-    public void afterPropertiesSet() {
+    public void init() {
         this.prepareContext();
+
+        if (hotkeySummarier instanceof ConfigableHotkeySummarier) {
+            ((ConfigableHotkeySummarier) hotkeySummarier).init();
+        }
+
         this.startIntervalTimeListener();
         this.addShutdownHook();
+    }
+
+    @Override
+    public void setExecutor(Executor executor) {
+        this.executor = executor;
+    }
+
+    @Override
+    public void setCollectConfig(CollectConfig collectConfig) {
+        this.collectConfig = collectConfig;
+    }
+
+    @Override
+    public void setHotkeySummarier(HotkeySummarier hotkeySummarier) {
+        this.hotkeySummarier = hotkeySummarier;
     }
 
     protected void startIntervalTimeListener() {
@@ -126,6 +142,17 @@ public abstract class AbstractHotkeyCollector implements ConfigurableHotkeyColle
         }, intervalSeconds * 1000, intervalSeconds * 1000);
     }
 
+    private void prepareContext() {
+        maximumSize = collectConfig.getMaximumSize();
+        if (maximumSize < 0) {
+            maximumSize = DEFAULT_MAXIMUM_SIZE;
+        }
+        this.intervalSeconds = collectConfig.getIntervalSeconds();
+        this.prevSummaryTime = 0;
+        this.collectNum = new AtomicInteger(0);
+        this.hotkeyContainer = this.getHotkeyContainer();
+    }
+
     private void addShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
@@ -134,51 +161,4 @@ public abstract class AbstractHotkeyCollector implements ConfigurableHotkeyColle
             }
         });
     }
-
-    private void prepareContext() {
-        maximumSize = properties.getMaximumSize();
-        if (maximumSize < 0) {
-            maximumSize = DEFAULT_MAXIMUM_SIZE;
-        }
-        this.intervalSeconds = properties.getIntervalSeconds();
-        this.prevSummaryTime = 0;
-        this.collectNum = new AtomicInteger(0);
-        this.hotkeyContainer = this.getHotkeyContainer();
-
-        try {
-            this.hotkeySummarier = this.loadHotkeySummarier(properties.getSummarier());
-        } catch (Throwable e) {
-            LOGGER.error("loadHotkeySummarier {} exception.", properties.getSummarier());
-            LOGGER.error("exception info : ", e);
-            System.exit(0);
-        }
-    }
-
-    protected HotkeySummarier loadHotkeySummarier(String summarier)
-        throws ClassNotFoundException, IllegalAccessException, InstantiationException {
-        Class<?> clazz = Class.forName(summarier,
-                                       true,
-                                       Thread.currentThread().getContextClassLoader());
-        HotkeySummarier hotkeySummarier = (HotkeySummarier) clazz.newInstance();
-        hotkeySummarier.setProperties(properties.getSummarierAddr());
-        hotkeySummarier.afterPropertiesSet();
-        return hotkeySummarier;
-    }
-
-    /**
-     * 允许通用手动调用设置数据总汇器
-     *
-     * 但是需要注意的时，该方法需要在{@link #afterPropertiesSet()}之后调用才有生效
-     *
-     * @param hotkeySummarier HotkeySummarier
-     */
-    public void setHotkeySummarier(HotkeySummarier hotkeySummarier) {
-        this.hotkeySummarier = hotkeySummarier;
-    }
-
-    @Override
-    public void setProperties(CollectProperties properties) {
-        this.properties = properties;
-    }
-
 }

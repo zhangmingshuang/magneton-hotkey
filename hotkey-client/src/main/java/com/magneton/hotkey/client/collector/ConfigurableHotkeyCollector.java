@@ -1,6 +1,7 @@
 package com.magneton.hotkey.client.collector;
 
-import com.magneton.hotkey.client.properties.CollectProperties;
+import com.magneton.hotkey.client.summarier.HotkeySummarier;
+import com.magneton.hotkey.client.config.CollectConfig;
 import java.util.concurrent.Executor;
 
 /**
@@ -9,9 +10,11 @@ import java.util.concurrent.Executor;
  */
 public interface ConfigurableHotkeyCollector extends HotkeyCollector {
 
-    void setProperties(CollectProperties properties);
-
-    void afterPropertiesSet();
+    void setCollectConfig(CollectConfig collectConfig);
 
     void setExecutor(Executor executor);
+
+    void setHotkeySummarier(HotkeySummarier hotkeySummarier);
+
+    void init();
 }

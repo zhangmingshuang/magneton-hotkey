@@ -1,7 +1,6 @@
 package com.magneton.hotkey.client.collector;
 
-import com.magneton.hotkey.client.HotkeyContainer;
-import com.magneton.hotkey.client.properties.CollectProperties;
+import com.magneton.hotkey.client.config.CollectConfig;
 import com.magneton.hotkey.client.support.ArrayHotkeyContainer;
 import com.magneton.hotkey.client.support.TestHotkeySummarier;
 import com.magneton.hotkey.common.Hotkey;
@@ -19,9 +18,9 @@ public class AbstractHotkeyCollectorTest {
 
     @Test
     public void test() {
-        CollectProperties properties = new CollectProperties();
-        properties.setMaximumSize(1);
-        HotkeyCollector collector = this.createHotkeyCollector(properties);
+        CollectConfig collectConfig = new CollectConfig();
+        collectConfig.setMaximumSize(1);
+        HotkeyCollector collector = this.createHotkeyCollector(collectConfig);
         collector.fire(Hotkey.of("key", "value"));
         collector.fire(Hotkey.of("key", "value"));
         Assert.assertTrue(summary);
@@ -30,7 +29,7 @@ public class AbstractHotkeyCollectorTest {
         Assert.assertTrue(hotkeyContainer.size() == 1);
     }
 
-    private HotkeyCollector createHotkeyCollector(CollectProperties properties) {
+    private HotkeyCollector createHotkeyCollector(CollectConfig collectConfig) {
         AbstractHotkeyCollector collector = new AbstractHotkeyCollector() {
             @Override
             protected HotkeyContainer getHotkeyContainer() {
@@ -43,8 +42,8 @@ public class AbstractHotkeyCollectorTest {
                 super.summary();
             }
         };
-        collector.setProperties(properties);
-        collector.afterPropertiesSet();
+        collector.setCollectConfig(collectConfig);
+        collector.init();
         collector.setHotkeySummarier(hotkeySummarier);
         return collector;
     }

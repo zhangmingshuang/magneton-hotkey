@@ -1,7 +1,7 @@
 package com.magneton.hotkey.client.support;
 
-import com.magneton.hotkey.client.HotkeyContainer;
-import com.magneton.hotkey.client.HotkeySummarier;
+import com.magneton.hotkey.client.collector.HotkeyContainer;
+import com.magneton.hotkey.client.summarier.HotkeySummarier;
 import lombok.Getter;
 
 /**
@@ -12,16 +12,6 @@ public class TestHotkeySummarier implements HotkeySummarier {
 
     @Getter
     private HotkeyContainer hotkeyContainer;
-
-    @Override
-    public void setProperties(Object properties) {
-
-    }
-
-    @Override
-    public void afterPropertiesSet() {
-
-    }
 
     @Override
     public void report(HotkeyContainer hotkeyContainer) {

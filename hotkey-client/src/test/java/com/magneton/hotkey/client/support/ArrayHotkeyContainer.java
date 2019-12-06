@@ -1,6 +1,6 @@
 package com.magneton.hotkey.client.support;
 
-import com.magneton.hotkey.client.HotkeyContainer;
+import com.magneton.hotkey.client.collector.HotkeyContainer;
 import com.magneton.hotkey.common.Hotkey;
 import java.util.ArrayList;
 import java.util.List;

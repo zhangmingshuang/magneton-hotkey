@@ -1,9 +1,12 @@
 package com.magneton.hotkey.server.demo;
 
-import com.magneton.hotkey.server.HotkeyServer;
-import com.magneton.hotkey.server.consumer.HotkeyConsumer;
-import com.magneton.hotkey.server.demo.consumer.HotkeyComponent;
-import com.magneton.hotkey.server.starter.Starter;
+import com.magneton.hotkey.server.DefaultHotkeyServer;
+import com.magneton.hotkey.server.demo.invoker.HotkeyComponent;
+import com.magneton.hotkey.server.demo.invoker.HotkeyInvoker;
+import com.magneton.hotkey.server.demo.properties.ConfigProperties;
+import com.magneton.hotkey.server.storager.MemoryHotkeyStorager;
+import com.magneton.hotkey.server.trigger.DefaultHotkeyTrigger;
+import com.magneton.hotkey.server.trigger.HotkeyTrigger;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -21,25 +24,36 @@ public class AutoConfiguration {
     private static final Executor EXECUTOR = Executors.newFixedThreadPool(4);
 
     @Autowired
-    private List<HotkeyConsumer> hotkeyConsumers;
+    private ConfigProperties configProperties;
+    @Autowired
+    private List<HotkeyInvoker> hotkeyInvokers;
+
 
     @PostConstruct
     public void post() {
-        try {
-            Starter starter = HotkeyServer.loadStarter(null, EXECUTOR);
-            for (int i = 0, l = hotkeyConsumers.size(); i < l; i++) {
-                HotkeyConsumer hotkeyConsumer = hotkeyConsumers.get(i);
-                HotkeyComponent hotkey = hotkeyConsumer.getClass().getAnnotation(HotkeyComponent.class);
-                String value = hotkey.value();
-                if (value.equals("*")) {
-                    starter.registerDefaultConsumer(hotkeyConsumer);
+
+        DefaultHotkeyServer defaultHotkeyServer = new DefaultHotkeyServer();
+        defaultHotkeyServer.setPort(configProperties.getPort());
+        defaultHotkeyServer.afterStart(server -> {
+            HotkeyTrigger hotkeyTrigger = new DefaultHotkeyTrigger();
+            //配置存储器
+            hotkeyTrigger.registerStorager(new MemoryHotkeyStorager());
+            //配置规则处理器
+            for (HotkeyInvoker hotkeyInvoker : hotkeyInvokers) {
+                HotkeyComponent hotkeyComponent = hotkeyInvoker.getClass().getAnnotation(HotkeyComponent.class);
+                if (hotkeyComponent == null) {
+                    continue;
+                }
+                String key = hotkeyComponent.value();
+                if ("*".equals(key)) {
+                    hotkeyTrigger.registerDefaultInvoker(hotkeyInvoker.getRule(), hotkeyInvoker);
                 } else {
-                    starter.registerConsumer(hotkey.value(), hotkeyConsumer);
+                    hotkeyTrigger.registerInvoker(key, hotkeyInvoker.getRule(), hotkeyInvoker);
                 }
             }
-        } catch (Throwable e) {
-            e.printStackTrace();
-            System.exit(0);
-        }
+            server.registerListener(hotkeyTrigger);
+        });
+        defaultHotkeyServer.start();
+
     }
 }

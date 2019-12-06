@@ -1,18 +1,111 @@
 # magneton-hotkey
 
-热点数据采集分发系统， 适用于系统中需要对热点数据进行采集，汇总，
-然后在规定内进行通知读取热点到缓存的场景中。
+一个高效的，容易扩展、稳定的`简单`业务热点数据采集系统，
+适用于系统中需要对热点数据进行采集，汇总、在汇总服务端配置规则，进行通知读取热点到缓存的场景中。
 
-由于该系统是在`2016年`左右在一个`运营数据分析`系统中的子模块，
-，目前大部份代码逻辑都是以当时的设计和开发进行的，暂时未进行改进和大量的修改。
+###### 为什么不采用MQ或其他采集系统？
+首先开发这个系统的时候，由于运维成本、开发体系、服务器环境系列问题，
+被不允许使用MQ。更没办法采集其他较重的框架了。所以，需要自己开发一套较为高效的简单采集系统。
 
-主要将`Netty`替换成了`SofaBolt`，和去除了当时的业务依赖。
+## Client使用
+### SpringBoot
+```java
+@Bean
+public HotkeyCollector hotkeyCollector() {
+    //配置
+    BoltSummarierConfig boltSummarierConfig = new BoltSummarierConfig();
+    boltSummarierConfig.setAddrs(configProperties.getBoltAddr());
+    //使用默认实现
+    DefaultHotkeyCollector collector = new DefaultHotkeyCollector();
+    collector.setBoltSummarierConfig(boltSummarierConfig);
+    collector.setCollectConfig(configProperties);
+    collector.setExecutor(Executors.newFixedThreadPool(3));
+    collector.start();
+    return collector;
+}
+```
+### 其他
+```java
+BoltSummarierConfig config = new BoltSummarierConfig();
+//配置汇总器上报地址
+config.setAddrs(new String[]{"127.0.0.1:18903?_CONNECTIONNUM=3&_CONNECTIONWARMUP=true"});
+//配置连接超时时间
+config.setConnectionTimeout(3000);
+DefaultHotkeyCollector collector = new DefaultHotkeyCollector();
+collector.setBoltSummarierConfig(config);
+//设置线程池
+//collector.setExecutor();
+//配置采集到多少数据量时进行上报
+collector.setMaximumSize(1024);
+//配置每隔10S上报一次
+collector.setIntervalSeconds(10);
 
-所以，Client端还是主要以埋点的进行采集，对系统的侵入性较大。
+collector.start();
+```
 
-> 注： 该版本为重新编写的允许开放的版本，暂未经过真实的场景测试。
->
-> 该版本代码会应用在新项目`国网微信公众号`中进行实战。
+## Server使用
+### SpringBoot
+```java
+DefaultHotkeyServer defaultHotkeyServer = new DefaultHotkeyServer();
+defaultHotkeyServer.setPort(configProperties.getPort());
+defaultHotkeyServer.afterStart(server -> {
+    HotkeyTrigger hotkeyTrigger = new DefaultHotkeyTrigger();
+    //配置存储器
+    hotkeyTrigger.registerStorager(new MemoryHotkeyStorager());
+    //配置规则处理器
+    for (HotkeyInvoker hotkeyInvoker : hotkeyInvokers) {
+        HotkeyComponent hotkeyComponent = hotkeyInvoker.getClass().getAnnotation(HotkeyComponent.class);
+        if (hotkeyComponent == null) {
+            continue;
+        }
+        String key = hotkeyComponent.value();
+        if ("*".equals(key)) {
+            hotkeyTrigger.registerDefaultInvoker(hotkeyInvoker.getRule(), hotkeyInvoker);
+        } else {
+            hotkeyTrigger.registerInvoker(key, hotkeyInvoker.getRule(), hotkeyInvoker);
+        }
+    }
+    server.registerListener(hotkeyTrigger);
+});
+defaultHotkeyServer.start();
+```
+#### 规则处理器 
+```java
+/**
+ * 该类表示的，监听热点数据key为test
+ * 并且，被触发了 {@link NumberTriggerRule#getNumber()}次数之后
+ * 回调{@link #invoke(String, NumberTriggerRule)}方法
+ */
+@HotkeyComponent("test")
+public class TestNumInvoker implements HotkeyInvoker<NumberTriggerRule> {
+
+    @Override
+    public NumberTriggerRule getRule() {
+        //每被触发2次，回调
+        return new NumberTriggerRule(2);
+    }
+
+    @Override
+    public void invoke(String key, NumberTriggerRule triggerRule) {
+        System.out.println("TestNumInvoker:" + key + "," + triggerRule);
+        System.out.println("加载需要预热的数据。。。。。。");
+    }
+}
+```
+### 其他
+```java
+DefaultHotkeyServer defaultHotkeyServer = new DefaultHotkeyServer();
+defaultHotkeyServer.setPort(port);
+defaultHotkeyServer.afterStart(server -> {
+    //注册监听器...
+});
+defaultHotkeyServer.start();
+```
+
+
+  
+
+
 
 
 

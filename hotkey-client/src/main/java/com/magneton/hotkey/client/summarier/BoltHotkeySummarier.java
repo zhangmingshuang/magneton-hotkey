@@ -1,10 +1,13 @@
 package com.magneton.hotkey.client.summarier;
 
 import com.alipay.remoting.rpc.RpcClient;
-import com.magneton.hotkey.client.HotkeyContainer;
-import com.magneton.hotkey.client.HotkeySummarier;
+import com.magneton.hotkey.client.collector.HotkeyContainer;
 import com.magneton.hotkey.common.Hotkey;
-import java.util.concurrent.ArrayBlockingQueue;
+import com.magneton.hotkey.common.Invoker;
+import com.magneton.hotkey.common.LoadBalance;
+import com.magneton.hotkey.common.RandomLoadBalnace;
+import java.util.ArrayList;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,20 +15,53 @@ import org.slf4j.LoggerFactory;
  * @author zhangmingshuang
  * @since 2019/12/3
  */
-public class BoltHotkeySummarier implements HotkeySummarier<String> {
+public class BoltHotkeySummarier implements ConfigableHotkeySummarier {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BoltHotkeySummarier.class);
+
     private RpcClient rpcClient;
-    private ArrayBlockingQueue queue;
-    private String addr = "127.0.0.1:18903";
+
+    private List<Invoker<String>> invokers;
     private int connectionTimeout;
 
+    private BoltSummarierConfig sumarrierConfig;
+    private LoadBalance loadBalance;
+
+    public BoltHotkeySummarier(BoltSummarierConfig sumarrierConfig) {
+        this.sumarrierConfig = sumarrierConfig;
+    }
+
     @Override
-    public void afterPropertiesSet() {
+    public void init() {
+        this.prepareConfig();
         rpcClient = new RpcClient();
         rpcClient.enableConnectionMonitorSwitch();
         rpcClient.enableReconnectSwitch();
         rpcClient.init();
+    }
+
+    private void prepareConfig() {
+        String[] addrs = sumarrierConfig.getAddrs();
+        if (addrs == null || addrs.length < 1) {
+            throw new IllegalArgumentException("hasn't sumarrier address configuration.");
+        }
+
+        invokers = new ArrayList<>(addrs.length);
+        for (int i = 0; i < addrs.length; i++) {
+            String addr = addrs[i];
+            int index = addr.indexOf(';');
+            if (index == -1) {
+                invokers.add(new Invoker<>(addr));
+            } else {
+                int weight = Integer.parseInt(addr.substring(index + 1));
+                invokers.add(new Invoker<>(weight, addr.substring(0, index)));
+            }
+        }
+        if (invokers.size() > 1) {
+            loadBalance = new RandomLoadBalnace();
+        }
+
+        connectionTimeout = sumarrierConfig.getConnectionTimeout();
     }
 
     @Override
@@ -37,17 +73,17 @@ public class BoltHotkeySummarier implements HotkeySummarier<String> {
         if (hotkeys == null || hotkeys.length < 1) {
             return;
         }
+        String addr;
+        if (loadBalance != null) {
+            Invoker<String> invoker = loadBalance.doSelect(invokers);
+            addr = invoker.getData();
+        } else {
+            addr = invokers.get(0).getData();
+        }
         try {
             rpcClient.oneway(addr, hotkeys);
         } catch (Throwable e) {
             LOGGER.error("invoke " + addr + " exception.", e);
-        }
-    }
-
-    @Override
-    public void setProperties(String properties) {
-        if (properties != null && !properties.isEmpty()) {
-            this.addr = properties;
         }
     }
 }
